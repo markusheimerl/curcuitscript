@@ -1,10 +1,10 @@
+
 %{
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include "pcb_model.h"  /* This include is already present but make sure it's here */
-#include "gerber_export.h"
+#include "pcb_model.h"
 
 extern int yylex();
 extern int yylineno;
@@ -13,12 +13,16 @@ extern FILE* yyin;
 
 void yyerror(const char* s);
 
-// Global variables for building the PCB model
+// Global variables
 Board* current_board = NULL;
 Component* current_component = NULL;
 Placement* current_placement = NULL;
 Net* current_net = NULL;
 Pin current_pin;
+
+// Forward declare gerber export functions
+int generate_gerber_files(Board* board, const char* output_dir);
+int generate_drill_files(Board* board, const char* output_dir);
 %}
 
 %union {
@@ -29,7 +33,6 @@ Pin current_pin;
     PinReference pin_ref;
 }
 
-/* Tokens */
 %token BOARD COMPONENT PLACE NET AS AT ROTATION SIDE TOP BOTTOM
 %token WIDTH HEIGHT LAYERS PACKAGE PINS NAME NUM FUNCTION MANUFACTURER MPN
 %token MM IN MIL
@@ -37,7 +40,6 @@ Pin current_pin;
 %token <floatval> FLOAT
 %token <string> IDENTIFIER STRING
 
-/* Non-terminals with types */
 %type <floatval> dimension
 %type <pin_ref> pin_ref
 
@@ -135,7 +137,6 @@ component_property
     }
     | PINS ':' '[' 
     {
-        // Reset the pin array
         if (current_component->pins) {
             for (int i = 0; i < current_component->pin_count; i++) {
                 if (current_component->pins[i].name) free(current_component->pins[i].name);
@@ -161,7 +162,6 @@ pin_list
 pin_decl
     : '{'
     {
-        // Initialize the current pin
         memset(&current_pin, 0, sizeof(Pin));
         current_pin.number = -1;
     }
@@ -283,30 +283,12 @@ pin_ref
     ;
 
 dimension
-    : INTEGER MM
-    {
-        $$ = $1;
-    }
-    | FLOAT MM
-    {
-        $$ = $1;
-    }
-    | INTEGER IN
-    {
-        $$ = $1 * 25.4; // Convert inches to mm
-    }
-    | FLOAT IN
-    {
-        $$ = $1 * 25.4; // Convert inches to mm
-    }
-    | INTEGER MIL
-    {
-        $$ = $1 * 0.0254; // Convert mils to mm
-    }
-    | FLOAT MIL
-    {
-        $$ = $1 * 0.0254; // Convert mils to mm
-    }
+    : INTEGER MM { $$ = $1; }
+    | FLOAT MM   { $$ = $1; }
+    | INTEGER IN { $$ = $1 * 25.4; }
+    | FLOAT IN   { $$ = $1 * 25.4; }
+    | INTEGER MIL { $$ = $1 * 0.0254; }
+    | FLOAT MIL   { $$ = $1 * 0.0254; }
     ;
 
 %%

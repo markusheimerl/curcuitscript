@@ -3,7 +3,6 @@
 #include <string.h>
 #include "pcb_model.h"
 
-// Helper function to check memory allocation
 static void check_allocation(void* ptr, const char* error_message) {
     if (!ptr) {
         fprintf(stderr, "Memory allocation failed: %s\n", error_message);
@@ -18,21 +17,18 @@ Board* create_board() {
     board->name = NULL;
     board->width = 0;
     board->height = 0;
-    board->layers = 2;  // default to 2 layers
+    board->layers = 2;
     
-    // Initialize component array
     board->component_capacity = 10;
     board->components = (Component*)malloc(board->component_capacity * sizeof(Component));
     check_allocation(board->components, "initializing components array");
     board->component_count = 0;
     
-    // Initialize placement array
     board->placement_capacity = 10;
     board->placements = (Placement*)malloc(board->placement_capacity * sizeof(Placement));
     check_allocation(board->placements, "initializing placements array");
     board->placement_count = 0;
     
-    // Initialize net array
     board->net_capacity = 10;
     board->nets = (Net*)malloc(board->net_capacity * sizeof(Net));
     check_allocation(board->nets, "initializing nets array");
@@ -65,7 +61,7 @@ Placement* create_placement() {
     placement->position.x = 0;
     placement->position.y = 0;
     placement->rotation = 0;
-    placement->top_side = true;  // Default to top side
+    placement->top_side = true;
     
     return placement;
 }
@@ -92,7 +88,6 @@ void add_component(Board* board, Component* component) {
     }
     
     board->components[board->component_count++] = *component;
-    // Note: we don't free component here as it's being directly used
 }
 
 void add_pin_to_component(Component* component, Pin pin) {
@@ -115,7 +110,6 @@ void add_placement(Board* board, Placement* placement) {
     }
     
     board->placements[board->placement_count++] = *placement;
-    // Note: we don't free placement here as it's being directly used
 }
 
 void add_net(Board* board, Net* net) {
@@ -127,7 +121,6 @@ void add_net(Board* board, Net* net) {
     }
     
     board->nets[board->net_count++] = *net;
-    // Note: we don't free net here as it's being directly used
 }
 
 void add_connection_to_net(Net* net, PinReference pin_ref) {
@@ -144,10 +137,8 @@ void add_connection_to_net(Net* net, PinReference pin_ref) {
 void free_board(Board* board) {
     if (!board) return;
     
-    // Free board name
     if (board->name) free(board->name);
     
-    // Free components
     for (int i = 0; i < board->component_count; i++) {
         Component* comp = &board->components[i];
         if (comp->name) free(comp->name);
@@ -155,7 +146,6 @@ void free_board(Board* board) {
         if (comp->manufacturer) free(comp->manufacturer);
         if (comp->mpn) free(comp->mpn);
         
-        // Free pins
         for (int j = 0; j < comp->pin_count; j++) {
             Pin* pin = &comp->pins[j];
             if (pin->name) free(pin->name);
@@ -167,7 +157,6 @@ void free_board(Board* board) {
     
     if (board->components) free(board->components);
     
-    // Free placements
     for (int i = 0; i < board->placement_count; i++) {
         Placement* place = &board->placements[i];
         if (place->ref_designator) free(place->ref_designator);
@@ -176,12 +165,10 @@ void free_board(Board* board) {
     
     if (board->placements) free(board->placements);
     
-    // Free nets
     for (int i = 0; i < board->net_count; i++) {
         Net* net = &board->nets[i];
         if (net->name) free(net->name);
         
-        // Free connections
         for (int j = 0; j < net->connection_count; j++) {
             PinReference* ref = &net->connections[j];
             if (ref->instance) free(ref->instance);
@@ -192,7 +179,5 @@ void free_board(Board* board) {
     }
     
     if (board->nets) free(board->nets);
-    
-    // Free the board itself
     free(board);
 }
