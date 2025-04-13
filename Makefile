@@ -9,7 +9,7 @@ LEXER = lexer.c
 HEADER = parser.h
 
 # Object files
-OBJECTS = main.o lexer.o parser.o
+OBJECTS = main.o lexer.o parser.o pcb_model.o gerber_export.o
 
 # Target executable
 TARGET = circuitscript.out
@@ -19,13 +19,19 @@ all: $(TARGET)
 $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $^
 
-main.o: main.c parser.h
+main.o: main.c parser.h pcb_model.h gerber_export.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 lexer.o: $(LEXER)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 parser.o: $(PARSER)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+pcb_model.o: pcb_model.c pcb_model.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+gerber_export.o: gerber_export.c gerber_export.h pcb_model.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(LEXER): circuitscript.l $(HEADER)

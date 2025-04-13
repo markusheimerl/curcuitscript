@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include "pcb_model.h"  /* This include is already present but make sure it's here */
+#include "gerber_export.h"
 
 extern int yylex();
 extern int yylineno;
@@ -9,12 +12,21 @@ extern char* yytext;
 extern FILE* yyin;
 
 void yyerror(const char* s);
+
+// Global variables for building the PCB model
+Board* current_board = NULL;
+Component* current_component = NULL;
+Placement* current_placement = NULL;
+Net* current_net = NULL;
+Pin current_pin;
 %}
 
 %union {
     int integer;
     double floatval;
     char* string;
+    Point point;
+    PinReference pin_ref;
 }
 
 /* Tokens */
@@ -27,11 +39,15 @@ void yyerror(const char* s);
 
 /* Non-terminals with types */
 %type <floatval> dimension
+%type <pin_ref> pin_ref
 
 %%
 
 program
     : declarations
+    {
+        printf("CircuitScript parsing completed successfully.\n");
+    }
     ;
 
 declarations
@@ -47,9 +63,14 @@ declaration
     ;
 
 board_decl
-    : BOARD '{' board_properties '}'
+    : BOARD '{'
     {
-        printf("Board definition found\n");
+        current_board = create_board();
+    }
+    board_properties '}'
+    {
+        printf("Board definition processed: %s\n", 
+               current_board->name ? current_board->name : "unnamed");
     }
     ;
 
@@ -61,28 +82,33 @@ board_properties
 board_property
     : NAME ':' STRING ';'
     {
-        printf("Board name: %s\n", $3);
-        free($3);
+        if (current_board->name) free(current_board->name);
+        current_board->name = $3;
     }
     | WIDTH ':' dimension ';'
     {
-        printf("Board width: %.2f\n", $3);
+        current_board->width = $3;
     }
     | HEIGHT ':' dimension ';'
     {
-        printf("Board height: %.2f\n", $3);
+        current_board->height = $3;
     }
     | LAYERS ':' INTEGER ';'
     {
-        printf("Board layers: %d\n", $3);
+        current_board->layers = $3;
     }
     ;
 
 component_decl
-    : COMPONENT IDENTIFIER '{' component_properties '}'
+    : COMPONENT IDENTIFIER 
     {
-        printf("Component definition for %s\n", $2);
-        free($2);
+        current_component = create_component($2);
+    }
+    '{' component_properties '}'
+    {
+        add_component(current_board, current_component);
+        printf("Component definition processed: %s\n", current_component->name);
+        current_component = NULL;
     }
     ;
 
@@ -94,22 +120,36 @@ component_properties
 component_property
     : PACKAGE ':' IDENTIFIER ';'
     {
-        printf("Component package: %s\n", $3);
-        free($3);
+        if (current_component->package) free(current_component->package);
+        current_component->package = $3;
     }
     | MANUFACTURER ':' STRING ';'
     {
-        printf("Component manufacturer: %s\n", $3);
-        free($3);
+        if (current_component->manufacturer) free(current_component->manufacturer);
+        current_component->manufacturer = $3;
     }
     | MPN ':' STRING ';'
     {
-        printf("Component part number: %s\n", $3);
-        free($3);
+        if (current_component->mpn) free(current_component->mpn);
+        current_component->mpn = $3;
     }
-    | PINS ':' '[' pin_list ']' ';'
+    | PINS ':' '[' 
     {
-        printf("Component pins defined\n");
+        // Reset the pin array
+        if (current_component->pins) {
+            for (int i = 0; i < current_component->pin_count; i++) {
+                if (current_component->pins[i].name) free(current_component->pins[i].name);
+                if (current_component->pins[i].function) free(current_component->pins[i].function);
+            }
+            free(current_component->pins);
+            current_component->pins = NULL;
+            current_component->pin_count = 0;
+            current_component->pin_capacity = 0;
+        }
+    }
+    pin_list ']' ';'
+    {
+        printf("Component pins processed: %d pins defined\n", current_component->pin_count);
     }
     ;
 
@@ -119,9 +159,15 @@ pin_list
     ;
 
 pin_decl
-    : '{' pin_properties '}'
+    : '{'
     {
-        printf("Pin defined\n");
+        // Initialize the current pin
+        memset(&current_pin, 0, sizeof(Pin));
+        current_pin.number = -1;
+    }
+    pin_properties '}'
+    {
+        add_pin_to_component(current_component, current_pin);
     }
     ;
 
@@ -133,26 +179,37 @@ pin_properties
 pin_property
     : NUM ':' INTEGER
     {
-        printf("Pin number: %d\n", $3);
+        current_pin.number = $3;
     }
     | NAME ':' IDENTIFIER
     {
-        printf("Pin name: %s\n", $3);
-        free($3);
+        if (current_pin.name) free(current_pin.name);
+        current_pin.name = $3;
     }
     | FUNCTION ':' IDENTIFIER
     {
-        printf("Pin function: %s\n", $3);
-        free($3);
+        if (current_pin.function) free(current_pin.function);
+        current_pin.function = $3;
     }
     ;
 
 place_decl
-    : PLACE IDENTIFIER AS IDENTIFIER '{' place_properties '}'
+    : PLACE IDENTIFIER 
     {
-        printf("Placing component %s as %s\n", $2, $4);
-        free($2);
-        free($4);
+        current_placement = create_placement();
+        current_placement->component_name = $2;
+    }
+    AS IDENTIFIER 
+    {
+        current_placement->ref_designator = $5;
+    }
+    '{' place_properties '}'
+    {
+        add_placement(current_board, current_placement);
+        printf("Placement processed: %s as %s\n", 
+               current_placement->component_name, 
+               current_placement->ref_designator);
+        current_placement = NULL;
     }
     ;
 
@@ -164,11 +221,12 @@ place_properties
 place_property
     : AT ':' '(' dimension ',' dimension ')' ';'
     {
-        printf("Component position: (%.2f, %.2f)\n", $4, $6);
+        current_placement->position.x = $4;
+        current_placement->position.y = $6;
     }
     | ROTATION ':' INTEGER ';'
     {
-        printf("Component rotation: %d degrees\n", $3);
+        current_placement->rotation = $3;
     }
     | SIDE ':' side_value ';'
     ;
@@ -176,38 +234,51 @@ place_property
 side_value
     : TOP
     {
-        printf("Component side: top\n");
+        current_placement->top_side = true;
     }
     | BOTTOM
     {
-        printf("Component side: bottom\n");
+        current_placement->top_side = false;
     }
     ;
 
 net_decl
-    : NET IDENTIFIER '{' pin_refs '}'
+    : NET IDENTIFIER 
     {
-        printf("Net definition: %s\n", $2);
-        free($2);
+        current_net = create_net($2);
+    }
+    '{' pin_refs '}'
+    {
+        add_net(current_board, current_net);
+        printf("Net processed: %s with %d connections\n", 
+               current_net->name, current_net->connection_count);
+        current_net = NULL;
     }
     ;
 
 pin_refs
     : pin_ref
+    {
+        add_connection_to_net(current_net, $1);
+    }
     | pin_refs ',' pin_ref
+    {
+        add_connection_to_net(current_net, $3);
+    }
     ;
 
 pin_ref
     : IDENTIFIER '.' IDENTIFIER
     {
-        printf("Pin reference: %s.%s\n", $1, $3);
-        free($1);
-        free($3);
+        $$.instance = $1;
+        $$.pin_name = $3;
+        $$.pin_number = -1;
     }
-    | IDENTIFIER '.' NUM '(' INTEGER ')'
+    | IDENTIFIER '.' IDENTIFIER '(' INTEGER ')'
     {
-        printf("Pin reference: %s.pin(%d)\n", $1, $5);
-        free($1);
+        $$.instance = $1;
+        $$.pin_name = $3;
+        $$.pin_number = $5;
     }
     ;
 
@@ -215,32 +286,26 @@ dimension
     : INTEGER MM
     {
         $$ = $1;
-        printf("Dimension: %d mm\n", $1);
     }
     | FLOAT MM
     {
         $$ = $1;
-        printf("Dimension: %.2f mm\n", $1);
     }
     | INTEGER IN
     {
-        $$ = $1 * 25.4;
-        printf("Dimension: %d in (%.2f mm)\n", $1, $$);
+        $$ = $1 * 25.4; // Convert inches to mm
     }
     | FLOAT IN
     {
-        $$ = $1 * 25.4;
-        printf("Dimension: %.2f in (%.2f mm)\n", $1, $$);
+        $$ = $1 * 25.4; // Convert inches to mm
     }
     | INTEGER MIL
     {
-        $$ = $1 * 0.0254;
-        printf("Dimension: %d mil (%.2f mm)\n", $1, $$);
+        $$ = $1 * 0.0254; // Convert mils to mm
     }
     | FLOAT MIL
     {
-        $$ = $1 * 0.0254;
-        printf("Dimension: %.2f mil (%.2f mm)\n", $1, $$);
+        $$ = $1 * 0.0254; // Convert mils to mm
     }
     ;
 
