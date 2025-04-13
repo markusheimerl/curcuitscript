@@ -38,6 +38,6 @@ $(PARSER) $(HEADER): circuitscript.y
 	$(YACC) -d -o $(PARSER) $<
 
 clean:
-	rm -f $(TARGET) $(OBJECTS) $(PARSER) $(LEXER) $(HEADER)
+	rm -rf $(TARGET) $(OBJECTS) $(PARSER) $(LEXER) $(HEADER) output/
 
 .PHONY: all clean
