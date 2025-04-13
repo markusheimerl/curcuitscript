@@ -1,0 +1,30 @@
+// Basic CircuitScript example
+
+board {
+    name: "Arduino Nano Clone";
+    width: 45mm;
+    height: 18mm;
+    layers: 2;
+}
+
+component ATmega328P {
+    package: TQFP32;
+    manufacturer: "Microchip";
+    mpn: "ATMEGA328P-AU";
+    
+    pins: [
+        {num: 1, name: PD3, function: digital},
+        {num: 2, name: PD4, function: digital}
+    ];
+}
+
+place ATmega328P as U1 {
+    at: (20mm, 10mm);
+    rotation: 0;
+    side: top;
+}
+
+net VCC {
+    U1.PD3,
+    U1.pin(1)
+}
